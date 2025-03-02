@@ -12,7 +12,7 @@ using ILogger = Serilog.ILogger;
  */
 namespace Webistecs_Monitor.Grafana
 {
-    public class GrafanaExportService : IHostedService, IDisposable
+    public class GrafanaExportService
     {
         private Timer? _timer;
         private static readonly ILogger Logger = LoggerFactory.Create();
@@ -27,7 +27,7 @@ namespace Webistecs_Monitor.Grafana
             _config = config;
         }
 
-        public async Task StartAsync(CancellationToken cancellationToken)
+        public async Task RunBackupProcess(CancellationToken cancellationToken)
         {
             Logger.Information("Starting Webistecs DB Backup Service...");
             Logger.Debug("Defining Grafana URLs for different time ranges. [to-delete]");
@@ -36,8 +36,8 @@ namespace Webistecs_Monitor.Grafana
             {
                 "http://192.168.68.107:30091/d/bNn5LUtiz/webistecs?orgId=1&refresh=1m&from=now-1h&to=now",
                 "http://192.168.68.107:30091/d/bNn5LUtiz/webistecs?orgId=1&refresh=1m&from=now-24h&to=now",
-                "http://192.168.68.107:30091/d/bNn5LUtiz/webistecs?orgId=1&refresh=1m&from=now-7d&to=now", // TODO - FIX it so that correct it 
-                "http://192.168.68.107:30091/d/k3_rook_global/kubernetes-overview?orgId=1&refresh=30s&from=now-7d&to=now" // TODO - FIX it so that correct it 
+                "http://192.168.68.107:30091/d/bNn5LUtiz/webistecs?orgId=1&refresh=1m&from=now-7d&to=now",
+                "http://192.168.68.107:30091/d/k3_rook_global/kubernetes-overview?orgId=1&refresh=30s&from=now-7d&to=now"
             };
 
             foreach (var url in grafanaUrls)
@@ -49,7 +49,6 @@ namespace Webistecs_Monitor.Grafana
             Logger.Information("Webistecs DB process completed, stopping service.");
         }
 
-        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public async Task CaptureDashboardScreenshot(string grafanaUrl)
         {

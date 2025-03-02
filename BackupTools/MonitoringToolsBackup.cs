@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using Microsoft.Extensions.Hosting;
 using Webistecs_Monitor.Configuration;
 using Webistecs_Monitor.Google;
 using Webistecs_Monitor.Logging;
@@ -9,12 +8,11 @@ using ILogger = Serilog.ILogger;
 
 namespace Webistecs_Monitor
 {
-    public class MonitoringToolsBackup : IHostedService, IDisposable
+    public class MonitoringToolsBackup
     {
         private static readonly ILogger Logger = LoggerFactory.Create();
         private readonly ApplicationConfiguration _config;
         private readonly GoogleDriveService _googleDriveService;
-        private Timer? _timer;
 
         public MonitoringToolsBackup(ApplicationConfiguration config, GoogleDriveService googleDriveService)
         {
@@ -22,7 +20,7 @@ namespace Webistecs_Monitor
             _googleDriveService = googleDriveService ?? throw new ArgumentNullException(nameof(googleDriveService), "❌ GoogleDriveService is null!");
         }
 
-        public async Task StartAsync(CancellationToken cancellationToken)
+        public async Task RunBackupProcess(CancellationToken cancellationToken)
         {
             try
             {
@@ -39,6 +37,7 @@ namespace Webistecs_Monitor
         private async Task RunBackupProcess()
         {
             var todayDate = DateTime.Now.ToString(DateFormat);
+            Logger.Debug("Using date string for backup: {TodayDate}", todayDate);
 
             foreach (var tool in MonitoringFolderIds.Tools)
             {
@@ -46,21 +45,32 @@ namespace Webistecs_Monitor
 
                 // Backup data directory
                 var dataDir = MonitoringFolderIds.GetLocalPath(tool);
+                Logger.Debug("Local data path for {Tool}: {DataDir}", tool, dataDir);
                 if (!string.IsNullOrEmpty(dataDir))
                 {
                     await BackupDirectory(tool, dataDir, todayDate);
                 }
+                else
+                {
+                    Logger.Warning("No local data directory defined for {Tool}. Skipping data backup.", tool);
+                }
 
                 // Backup configuration files (if applicable)
                 var configDir = MonitoringFolderIds.GetConfigPath(tool);
+                Logger.Debug("Configuration path for {Tool}: {ConfigDir}", tool, configDir);
                 if (!string.IsNullOrEmpty(configDir))
                 {
                     await BackupDirectory($"{tool}-config", configDir, todayDate);
+                }
+                else
+                {
+                    Logger.Warning("No configuration directory defined for {Tool}. Skipping config backup.", tool);
                 }
 
                 // Create Prometheus snapshot (if applicable)
                 if (tool == "prometheus")
                 {
+                    Logger.Information("Prometheus detected. Initiating snapshot creation...");
                     await CreatePrometheusSnapshot();
                 }
             }
@@ -72,8 +82,9 @@ namespace Webistecs_Monitor
 
             var zipFileName = $"{tool}-{todayDate}.zip";
             var zipFilePath = Path.Combine(_config.LocalBackUpPath, zipFileName);
-            var createdZipFile = await TryZipDirectory(sourceDir, zipFilePath);
+            Logger.Debug("ZIP file will be created at: {ZipFilePath}", zipFilePath);
 
+            var createdZipFile = await TryZipDirectory(sourceDir, zipFilePath);
             if (createdZipFile == null)
             {
                 Logger.Information("Skipping backup for {Tool} - directory missing or zipping failed.", tool);
@@ -83,7 +94,7 @@ namespace Webistecs_Monitor
             var folderId = MonitoringFolderIds.GetFolderId(tool);
             if (string.IsNullOrEmpty(folderId))
             {
-                Logger.Information("No Google Drive folder ID found for {Tool}", tool);
+                Logger.Information("No Google Drive folder ID found for {Tool}. Skipping upload.", tool);
                 return;
             }
 
@@ -91,11 +102,13 @@ namespace Webistecs_Monitor
             var existingFileId = await _googleDriveService.FindFileInGoogleDrive(zipFileName, folderId);
             if (!string.IsNullOrEmpty(existingFileId))
             {
+                Logger.Debug("Existing backup file found (ID: {ExistingFileId}). Deleting it...", existingFileId);
                 await _googleDriveService.DeleteFileFromGoogleDrive(existingFileId);
                 Logger.Information("Deleted previous {Tool} backup from Google Drive (File ID: {ExistingFileId})", tool, existingFileId);
             }
 
-            // ✅ Corrected function call
+            // Upload the new backup file
+            Logger.Debug("Uploading new backup file {ZipFileName} to folder {FolderId}", zipFileName, folderId);
             await _googleDriveService.UploadFileToGoogleDrive(createdZipFile, folderId, "Monitoring Backup", JsonApplicationType);
             Logger.Information("✅ {Tool} backup successfully uploaded to Google Drive.", tool);
         }
@@ -116,9 +129,11 @@ namespace Webistecs_Monitor
 
             try
             {
+                Logger.Debug("Creating ZIP file: {DestinationZipFile}", destinationZipFile);
                 using var zipToCreate = new FileStream(destinationZipFile, FileMode.Create);
                 using var archive = new ZipArchive(zipToCreate, ZipArchiveMode.Create, true);
 
+                int fileCount = 0;
                 foreach (string file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
                 {
                     var entryName = file.Substring(sourceDir.Length + 1);
@@ -126,21 +141,22 @@ namespace Webistecs_Monitor
                     {
                         if (file.EndsWith("lock"))
                         {
-                            Logger.Information("Skipping lock file: {File}", file);
+                            Logger.Debug("Skipping lock file: {File}", file);
                             continue;
                         }
 
+                        Logger.Debug("Adding file to ZIP: {File}", file);
                         await using var fileStream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                         await using var entryStream = archive.CreateEntry(entryName, CompressionLevel.Optimal).Open();
                         await fileStream.CopyToAsync(entryStream);
+                        fileCount++;
                     }
                     catch (Exception ex)
                     {
                         Logger.Warning("Skipping file {File} due to error: {Message}", file, ex.Message);
                     }
                 }
-
-                Logger.Information("ZIP file created: {DestinationZipFile}", destinationZipFile);
+                Logger.Information("ZIP file created: {DestinationZipFile}. Total files added: {FileCount}", destinationZipFile, fileCount);
                 return destinationZipFile;
             }
             catch (Exception ex)
@@ -157,33 +173,34 @@ namespace Webistecs_Monitor
             try
             {
                 using var httpClient = new HttpClient();
-                var response = await httpClient.PostAsync("http://localhost:9090/api/v1/admin/tsdb/snapshot", null);
+                Logger.Debug("Sending POST request to Prometheus snapshot API...");
+                var response = await httpClient.PostAsync("http://192.168.68.107:30090/api/v1/admin/tsdb/snapshot", null);
                 response.EnsureSuccessStatusCode();
+                Logger.Debug("Snapshot API response received.");
 
                 var snapshotResponse = await response.Content.ReadAsStringAsync();
-                var snapshotName = snapshotResponse.Split('"')[3];
+                Logger.Debug("Snapshot response content: {SnapshotResponse}", snapshotResponse);
+
+                // Parse the snapshot name from the response
+                var snapshotNameParts = snapshotResponse.Split('"');
+                if (snapshotNameParts.Length < 4)
+                {
+                    Logger.Error("Snapshot response format unexpected. Unable to parse snapshot name.");
+                    return;
+                }
+                var snapshotName = snapshotNameParts[3];
+                Logger.Debug("Parsed snapshot name: {SnapshotName}", snapshotName);
 
                 var snapshotDir = Path.Combine("/mnt/source/prometheus/data/snapshots", snapshotName);
-                Logger.Information("Prometheus snapshot created: {SnapshotDir}", snapshotDir);
+                Logger.Information("Prometheus snapshot directory: {SnapshotDir}", snapshotDir);
 
+                // Backup the snapshot directory
                 await BackupDirectory("prometheus-snapshot", snapshotDir, DateTime.Now.ToString(DateFormat));
             }
             catch (Exception ex)
             {
                 Logger.Error("Failed to create Prometheus snapshot: {Message} {StackTrace}", ex.Message, ex.StackTrace);
             }
-        }
-
-        public Task StopAsync(CancellationToken cancellationToken)
-        {
-            Logger.Information("🛑 Stopping MonitoringToolsBackup Service...");
-            _timer?.Change(Timeout.Infinite, 0);
-            return Task.CompletedTask;
-        }
-
-        public void Dispose()
-        {
-            _timer?.Dispose();
         }
     }
 }

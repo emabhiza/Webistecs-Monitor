@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Webistecs-Monitor")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+51cdcba0d15c791c2f8c63754b6b3e08593efb2e")]
 [assembly: System.Reflection.AssemblyProductAttribute("Webistecs-Monitor")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Webistecs-Monitor")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
