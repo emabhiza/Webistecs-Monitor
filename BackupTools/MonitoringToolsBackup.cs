@@ -1,4 +1,10 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.IO.Compression;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using Webistecs_Monitor.Configuration;
 using Webistecs_Monitor.Google;
 using Webistecs_Monitor.Logging;
