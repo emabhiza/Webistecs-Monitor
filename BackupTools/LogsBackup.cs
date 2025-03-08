@@ -1,6 +1,12 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Hosting;
+using System.Threading;
+using System.Threading.Tasks;
 using Webistecs_Monitor.Configuration;
 using Webistecs_Monitor.Google;
 using Webistecs_Monitor.Logging;
@@ -8,9 +14,8 @@ using ILogger = Serilog.ILogger;
 
 namespace Webistecs_Monitor.BackupTools
 {
-    public class LogsBackup : IHostedService, IDisposable
+    public class LogsBackup
     {
-        private Timer? _timer;
         private static readonly ILogger Logger = LoggerFactory.Create();
         private readonly ApplicationConfiguration _config;
         private readonly GoogleDriveService _googleDriveService;
@@ -21,14 +26,7 @@ namespace Webistecs_Monitor.BackupTools
             _googleDriveService = googleDriveService ?? throw new ArgumentNullException(nameof(googleDriveService), "❌ _googleDriveService is null! Ensure Google Drive service is initialized.");
         }
 
-        public async Task StartAsync(CancellationToken cancellationToken)
-        {
-            Logger.Information("🚀 Starting Loki Logs Backup Service...");
-            await RunBackupProcess();
-            Logger.Information("✅ Loki Logs Backup Service process completed.");
-        }
-
-        public async Task RunBackupProcess()
+        public async Task RunBackupProcess(CancellationToken cancellationToken)
         {
             Logger.Information("📡 Fetching logs from Loki...");
 
@@ -60,7 +58,7 @@ namespace Webistecs_Monitor.BackupTools
                               $"?query={Uri.EscapeDataString(query)}&limit={limit}&start={startNs}&end={currentEnd}";
 
                     Logger.Information("📡 Querying Loki: {Url}", url);
-                    var response = await client.GetAsync(url);
+                    var response = await client.GetAsync(url, cancellationToken);
 
                     if (!response.IsSuccessStatusCode)
                     {
@@ -68,7 +66,7 @@ namespace Webistecs_Monitor.BackupTools
                         break;
                     }
 
-                    var content = await response.Content.ReadAsStringAsync();
+                    var content = await response.Content.ReadAsStringAsync(cancellationToken);
                     using var doc = JsonDocument.Parse(content);
                     var root = doc.RootElement;
 
@@ -179,7 +177,6 @@ namespace Webistecs_Monitor.BackupTools
             // ✅ Upload logs to Google Drive
             try
             {
-                
                 await _googleDriveService.UploadLogsToGoogleDrive(logsFilePath);
                 Logger.Information("✅ Log file uploaded to Google Drive: {FileName}", Path.GetFileName(logsFilePath));
             }
@@ -209,13 +206,6 @@ namespace Webistecs_Monitor.BackupTools
         private static long ToUnixNanoseconds(DateTimeOffset dto)
         {
             return dto.ToUnixTimeMilliseconds() * 1_000_000;
-        }
-
-        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public void Dispose()
-        {
-            _timer?.Dispose();
         }
     }
 }
