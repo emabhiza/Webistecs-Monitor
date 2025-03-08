@@ -15,7 +15,7 @@ IMAGE_TAG=$1         # Image tag: latest, v1.0.0
 BASE_NAME=$2         # Docker Hub username or repository owner
 
 # 🎯 Docker Image Name
-IMAGE_NAME="${BASE_NAME}/webistecs-util:${IMAGE_TAG}"
+IMAGE_NAME="${BASE_NAME}/webistecs-monitor:${IMAGE_TAG}"
 
 # 🛠️ Build the Docker image
 echo "🚧 Building Docker image: $IMAGE_NAME"

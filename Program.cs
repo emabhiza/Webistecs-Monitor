@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Webistecs_Monitor.BackupTools;
@@ -27,7 +23,8 @@ namespace Webistecs_Monitor
 
             // Load configuration before anything else
             var config = ApplicationConfiguration.LoadConfiguration();
-            Log.Information("✅ Loaded Configuration: GOOGLE_CREDENTIALS={CredentialsPath}, DB_PATH={DbPath}, BACKUP_PATH={BackupPath}",
+            Log.Information(
+                "✅ Loaded Configuration: GOOGLE_CREDENTIALS={CredentialsPath}, DB_PATH={DbPath}, BACKUP_PATH={BackupPath}",
                 config.CredentialsPath, config.DbPath, config.BackupPath);
 
             // Build the host and register dependencies
@@ -125,14 +122,14 @@ namespace Webistecs_Monitor
                 case "DatabaseBackup":
                     await dbBackup.RunBackupProcess(default);
                     break;
-                case "MonitoringBackup":
-                    await monitoringBackup.RunBackupProcess(default);
-                    break;
                 case "GrafanaBackup":
                     await grafanaBackup.RunBackupProcess(default);
                     break;
                 case "LogBackup":
                     await logsBackup.RunBackupProcess(default);
+                    break;
+                case "MonitoringBackup":
+                    await monitoringBackup.RunBackupProcess(default);
                     break;
                 default:
                     Log.Warning("⚠️ Unknown task: {TaskName}", taskName);
@@ -144,10 +141,38 @@ namespace Webistecs_Monitor
         {
             return new Dictionary<string, TaskMetadata>
             {
-                { "DatabaseBackup", new TaskMetadata { LastUpdate = DateTime.UtcNow.ToString("o"), Schedule = "DAILY", OverrideAppHealthStatus = false, DisableUpdates = false } },
-                { "MonitoringBackup", new TaskMetadata { LastUpdate = DateTime.UtcNow.ToString("o"), Schedule = "HOURLY", OverrideAppHealthStatus = false, DisableUpdates = false } },
-                { "LogBackup", new TaskMetadata { LastUpdate = DateTime.UtcNow.ToString("o"), Schedule = "HOURLY", OverrideAppHealthStatus = false, DisableUpdates = false } },
-                { "GrafanaBackup", new TaskMetadata { LastUpdate = DateTime.UtcNow.ToString("o"), Schedule = "HOURLY", OverrideAppHealthStatus = true, DisableUpdates = false } }
+                {
+                    "DatabaseBackup",
+                    new TaskMetadata
+                    {
+                        LastUpdate = DateTime.UtcNow.ToString("o"), Schedule = "DAILY", OverrideAppHealthStatus = false,
+                        DisableUpdates = false
+                    }
+                },
+                {
+                    "MonitoringBackup",
+                    new TaskMetadata
+                    {
+                        LastUpdate = DateTime.UtcNow.ToString("o"), Schedule = "HOURLY",
+                        OverrideAppHealthStatus = false, DisableUpdates = false
+                    }
+                },
+                {
+                    "LogBackup",
+                    new TaskMetadata
+                    {
+                        LastUpdate = DateTime.UtcNow.ToString("o"), Schedule = "HOURLY",
+                        OverrideAppHealthStatus = false, DisableUpdates = false
+                    }
+                },
+                {
+                    "GrafanaBackup",
+                    new TaskMetadata
+                    {
+                        LastUpdate = DateTime.UtcNow.ToString("o"), Schedule = "HOURLY", OverrideAppHealthStatus = true,
+                        DisableUpdates = false
+                    }
+                }
             };
         }
 
